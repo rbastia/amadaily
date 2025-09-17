@@ -1,0 +1,16 @@
+# Render service manifest
+# See https://render.com/docs/render-manifest for details
+services:
+  - type: web
+    name: AMA-DailyReport
+    env: python
+    repo: https://github.com/your-username/amadaily
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    plan: free
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: MAX_CONTENT_LENGTH
+        value: "52428800" # 50 MB
