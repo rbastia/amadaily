@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <title>AMA Timesheet Summarizer</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='ama_logo.png')}}" > 
+
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -41,11 +43,16 @@
 </head>
 <body>
   <div class="container">
-    <h1>Upload Timesheet</h1>
+    <h1>Combined Daily Report</h1>
+    <p>Upload an Excel workbook that contains both required sheets.</p>
     <form action="/upload" method="post" enctype="multipart/form-data">
-      <input type="file" name="file" accept=".xlsx" required>
-      <br>
-      <button type="submit">Summarize</button>
+      <input type="file" name="workbook" accept=".xlsx,.xls,.xlsm,.xlsb" required><br><br>
+      <label style="display:inline-flex; align-items:center; gap:8px; font-size:0.95rem;">
+        <input type="checkbox" name="per_sheet" checked>
+        Write each Job to its own sheet as well
+      </label>
+      <br><br>
+      <button type="submit">Generate Combined Report</button>
     </form>
   </div>
 </body>
