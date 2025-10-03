@@ -25,11 +25,41 @@ from datetime import datetime
 import pandas as pd
 from dateutil import parser as dateparser
 
-def process_timesheet(timesheet_path, output_dir="output"):
+# ---------------------------------------------------------------------------
+# Placeholder / noise job name detection
+# ---------------------------------------------------------------------------
+# Timesheet exports sometimes contain artifact strings like 'Column8', 'Column13',
+# or bare header tokens like 'Job'. We do NOT want to treat those as real jobs.
+# We'll filter them out before building the long records list.
+
+_PLACEHOLDER_JOB_REGEX = re.compile(r"^column\s*\d+$", re.IGNORECASE)
+_GENERIC_JOB_TOKENS = {"job", "job#", "job number", "column", "col"}
+
+def _is_placeholder_job(value: str | None) -> bool:
+    if value is None:
+        return True  # treat missing like placeholder so we skip it
+    s = str(value).strip()
+    if not s:
+        return True
+    if _PLACEHOLDER_JOB_REGEX.fullmatch(s):
+        return True
+    if s.lower() in _GENERIC_JOB_TOKENS:
+        return True
+    return False
+
+def process_timesheet(timesheet_path, output_dir="output", sheet_name: str = "Timesheet", include_driving: bool = False):
     """Parse the Timesheet and write outputs to `output_dir`.
 
     This function is intentionally simple and documented so a beginner can follow
     the steps.
+
+    Parameters:
+        timesheet_path (str): Path to the Timesheet Excel file.
+        output_dir (str): Folder for output CSVs.
+        sheet_name (str): Sheet name inside the workbook.
+        include_driving (bool): If True, add driving (D column) hours into Hours/Total.
+            If False (default), driving hours are ignored (preserves original behavior
+            and schema). No additional columns are added to outputs either way.
     """
 
     # 1) Ensure the output folder exists
@@ -38,7 +68,7 @@ def process_timesheet(timesheet_path, output_dir="output"):
     # 2) Read the 'Timesheet' sheet into a DataFrame. We use header=None because
     #    the Excel layout does not have a clean single header row (it has merged
     #    cells and repeated blocks across columns).
-    df = pd.read_excel(timesheet_path, sheet_name="Timesheet", header=None)
+    df = pd.read_excel(timesheet_path, sheet_name=sheet_name, header=None)
 
     # 3) Find the header row index that contains the word 'Employee'. We look at
     #    the first 15 rows for safety.
@@ -115,19 +145,42 @@ def process_timesheet(timesheet_path, output_dir="output"):
     # 8) Iterate day blocks and employee rows to build records
     records = []
     for day_col in day_start_cols:
-        # Within each block, locate 'Job' and 'H' (hours) columns by looking a few
-        # columns to the right of the Trk column (this matches the example layout).
+        # Within each day block, we only want to look at THAT day's columns.
+        # A block in the provided layout is exactly 5 columns wide:
+        #   Trk # | Job | H | W/S | D
+        # Previously we scanned up to 7 columns which allowed us to "see"
+        # the next day's 'Job' header and overwrite job_col with the following
+        # day's Job column. That caused most Friday (for example) jobs to be
+        # skipped unless the employee also had a Saturday entry (because we
+        # were pairing Friday hours with Saturday job cells that were blank).
+        #
+        # Fix: restrict the scan strictly to the current block width (5 cols),
+        # or stop early if we encounter another 'trk' header which signals the
+        # next day has started.
+        BLOCK_WIDTH = 5  # conservative; adjust if layout changes in future
         job_col = None
-        hours_col = None
-        for offset in range(0, 7):
+        hours_col = None  # 'H' column (work hours)
+        driving_col = None  # 'D' column (driving hours)
+        for offset in range(BLOCK_WIDTH):
             c = day_col + offset
             if c >= len(header):
                 break
             label = str(header[c]).strip().lower()
-            if label.startswith('job'):
+            # If (unlikely) we hit another 'trk' within the expected width (layout change), stop.
+            if offset > 0 and label.startswith('trk'):
+                break
+            if label.startswith('job') and job_col is None:  # first match within block
                 job_col = c
-            if label == 'h' or label == 'hours':
+            # accept headers like 'H', 'hours', or combined tokens like 'H,W/S,D'
+            if label.startswith('h') and hours_col is None:
                 hours_col = c
+            # driving column often just 'd'
+            if (label == 'd' or label.startswith('drive')) and driving_col is None:
+                driving_col = c
+
+        # If we somehow didn't find required base columns, skip this day block gracefully
+        if job_col is None or hours_col is None:
+            continue
 
         # Parse the date for this day from the row above the header
         date_val = df.iat[date_label_row, day_col] if date_label_row is not None else None
@@ -151,28 +204,48 @@ def process_timesheet(timesheet_path, output_dir="output"):
                 continue
 
             # Read job and hours safely (columns may be missing or empty)
-            job = df.iat[r, job_col] if job_col is not None and job_col < df.shape[1] else None
+            job_cell = df.iat[r, job_col] if job_col is not None and job_col < df.shape[1] else None
             hours = df.iat[r, hours_col] if hours_col is not None and hours_col < df.shape[1] else None
+            driving = df.iat[r, driving_col] if driving_col is not None and driving_col < df.shape[1] else None
+
+            # Normalize job text early; skip placeholder artifacts
+            job = None
+            if job_cell is not None and not pd.isna(job_cell):
+                job_text = str(job_cell).strip()
+                if job_text and not _is_placeholder_job(job_text):
+                    job = job_text
 
             # Convert hours to float when possible
-            hrs = 0.0
+            work_hrs = 0.0  # base work (H) hours
             if pd.notna(hours) and str(hours).strip() != '':
                 m = re.search(r"(\d+(?:\.\d+)?)", str(hours))
                 if m:
                     try:
-                        hrs = float(m.group(1))
+                        work_hrs = float(m.group(1))
                     except Exception:
-                        hrs = 0.0
+                        work_hrs = 0.0
 
-            # Skip rows with no job or zero hours
-            if pd.isna(job) or not str(job).strip() or hrs == 0.0:
+            drive_hrs = 0.0
+            if include_driving and driving_col is not None and pd.notna(driving) and str(driving).strip() != '':
+                m2 = re.search(r"(\d+(?:\.\d+)?)", str(driving))
+                if m2:
+                    try:
+                        drive_hrs = float(m2.group(1))
+                    except Exception:
+                        drive_hrs = 0.0
+
+            effective_hours = work_hrs + (drive_hrs if include_driving else 0.0)
+
+            # If not including driving and work hours are zero but driving exists, we skip.
+            # If including driving we allow rows where total (work+driving) > 0.
+            if job is None or effective_hours == 0.0:
                 continue
 
             records.append({
                 'Employee': emp,
                 'Date': the_date,
                 'Job': str(job).strip(),
-                'Hours': hrs,
+                'Hours': effective_hours,  # remains singular; optionally includes driving
                 'Trk#': df.iat[r, day_col] if day_col < df.shape[1] else None,
             })
 
@@ -188,7 +261,7 @@ def process_timesheet(timesheet_path, output_dir="output"):
         .groupby(['Date', 'Job'], dropna=False)
         .agg(
             EmployeeCount=('Employee', lambda x: x.nunique()),
-            TotalHours=('Hours', 'sum'),
+            TotalHours=('Hours', 'sum'),  # Hours may or may not include driving based on flag
             Employees=('Employee', lambda x: ', '.join(sorted(set(x))))
         )
         .reset_index()
@@ -199,5 +272,19 @@ def process_timesheet(timesheet_path, output_dir="output"):
 
     long_df.to_csv(out_csv, index=False)
     summary.to_excel(out_xlsx, index=False)
+
+    # out_csv = os.path.join(output_dir, 'timesheet_long_parsed.csv')   
+    # out_xlsx = os.path.join(output_dir, 'timesheet_daily_summary.csv')
+
+    # long_df.to_csv(out_csv, index=False)
+
+    # Safe write for summary: handle case where file is open (Windows Excel lock)
+    # try:
+    #     summary.to_csv(out_xlsx, index=False)
+    # except PermissionError:
+    #     base, ext = os.path.splitext(out_xlsx)
+    #     alt_path = base + '_new' + ext
+    #     summary.to_csv(alt_path, index=False)
+    #     out_xlsx = alt_path
 
     return out_xlsx

@@ -1,5 +1,4 @@
 Employee,Date,Job,Hours,Trk#
-Column1,2025-09-08,Column8,4.0,Column2
 Rigoberto Al-B,2025-09-08,Founders 2,9.5,121
 Carlos Al-V,2025-09-08,HanoverSpring,9.5,117
 Benito A,2025-09-08,ARA3A,9.5,124
@@ -7,7 +6,7 @@ Miguel A,2025-09-08,Wardman,9.5,126
 Evaristo A,2025-09-08,ARA3A,9.5,124
 William A,2025-09-08,Wardman,9.5,126
 Danis BA,2025-09-08,Tidal Basin,9.5,128
-Gaudencio B,2025-09-08,HanoverSpring,9.5,D2
+Gaudencio B,2025-09-08,Rowan,9.5,D2
 Alfonso D,2025-09-08,Wardman,9.5,125
 Antoine F,2025-09-08,HanoverSpring,9.5,Own
 Rata F,2025-09-08,HanoverSpring,9.5,117
@@ -28,7 +27,7 @@ Julio M,2025-09-08,Rowan,9.5,120
 Rogelio M,2025-09-08,Founders 2,9.5,121
 Misael M,2025-09-08,Wardman,9.5,Own
 Isidro M,2025-09-08,Tidal Basin,9.5,128
-Moises P,2025-09-08,HanoverSpring,9.5,122
+Moises P,2025-09-08,ARA3A,9.5,122
 Jose P,2025-09-08,HanoverSpring,9.5,117
 Leobardo RL,2025-09-08,ARA3A,9.5,122
 Feliciano R,2025-09-08,Tidal Basin,9.5,128
@@ -46,20 +45,20 @@ Oscar VS,2025-09-08,GU Henle,9.5,119
 Fernando V,2025-09-08,GU Henle,9.5,119
 Noe VL,2025-09-08,GU Henle,9.5,119
 Laurentino,2025-09-08,GU Henle,9.5,119
-Column1,2025-09-09,Column13,9.0,Column7
 Rigoberto Al-B,2025-09-09,Founders 2,9.0,121
 Carlos Al-V,2025-09-09,HanoverSpring,9.5,117
-Benito A,2025-09-09,ARA3A     Moorefield,9.5,124
+Benito A,2025-09-09,ARA3A,9.5,124
 Miguel A,2025-09-09,Wardman,9.5,126
-Evaristo A,2025-09-09,ARA3A     Moorefield,9.5,124
+Evaristo A,2025-09-09,ARA3A,9.5,124
 William A,2025-09-09,Wardman,9.5,126
 Danis BA,2025-09-09,Tidal Basin,9.5,128
 Gaudencio B,2025-09-09,HanoverSpring,9.5,D2
 Alfonso D,2025-09-09,Wardman,9.5,125
+Antoine F,2025-09-09,HanoverSpring,9.5,Own
 Rata F,2025-09-09,HanoverSpring,9.5,117
 Andres G,2025-09-09,Wardman,9.5,Own
-Daniel GS,2025-09-09,ARA3A     Moorefield,9.5,124
-Henry G,2025-09-09,ARA3A     Moorefield,9.5,118
+Daniel GS,2025-09-09,ARA3A,9.5,124
+Henry G,2025-09-09,Rowan,9.5,118
 Pablo G,2025-09-09,Wardman,9.5,125
 Honorio G,2025-09-09,Founders 2,9.0,121
 Carlos G,2025-09-09,Wardman,9.5,126
@@ -67,15 +66,17 @@ Daniel LG,2025-09-09,Rowan,9.5,118
 Juan G,2025-09-09,Wardman,9.5,
 Juan HR,2025-09-09,Tidal Basin,9.5,128
 Eduardo H,2025-09-09,Tidal Basin,9.5,128
+Jose Luis H,2025-09-09,Wardman,9.5,Own
 Jesus L,2025-09-09,Wardman,9.5,125
 Cristobal L,2025-09-09,Wardman,9.5,126
 Julio M,2025-09-09,Rowan,9.5,120
 Rogelio M,2025-09-09,Founders 2,9.0,121
-Eric M R,2025-09-09,ARA3A     Moorefield,9.5,122
+Eric M R,2025-09-09,ARA3A,9.5,122
+Misael M,2025-09-09,Wardman,9.5,Own
 Isidro M,2025-09-09,Tidal Basin,9.5,128
 Moises P,2025-09-09,HanoverSpring,9.5,117
 Jose P,2025-09-09,HanoverSpring,9.5,117
-Leobardo RL,2025-09-09,ARA3A     Moorefield,9.5,122
+Leobardo RL,2025-09-09,ARA3A,9.5,122
 Feliciano R,2025-09-09,Tidal Basin,9.5,128
 Alberto R,2025-09-09,Tidal Basin,9.5,128
 Diego R,2025-09-09,Wardman,9.5,Own
@@ -83,66 +84,66 @@ Eliacim R,2025-09-09,Wardman,9.5,Own
 Luis Enrique R,2025-09-09,Rowan,9.5,118
 Luis Martin R,2025-09-09,Rowan,9.5,120
 Benny S,2025-09-09,Wardman,9.5,126
-Omar S,2025-09-09,ARA3A     Moorefield,9.5,122
+Omar S,2025-09-09,ARA3A,9.5,122
 Adalberto T,2025-09-09,Rowan,9.5,118
 Elvis T,2025-09-09,Rowan,9.5,120
 Trinidad T,2025-09-09,Rowan,9.5,120
 Oscar VS,2025-09-09,GU Henle,9.5,119
 Fernando V,2025-09-09,GU Henle,9.5,119
-Noe VL,2025-09-09,Canvas,9.5,119
+Noe VL,2025-09-09,GU Henle,9.5,119
 Laurentino,2025-09-09,GU Henle,9.5,119
-Column1,2025-09-10,Column18,14.0,Column12
-Rigoberto Al-B,2025-09-10,2011 Crystal,9.5,121
+Rigoberto Al-B,2025-09-10,Founders 2,9.5,121
 Carlos Al-V,2025-09-10,HanoverSpring,9.5,117
-Benito A,2025-09-10,Moorfield,10.0,124
+Benito A,2025-09-10,ARA3A     Moorefield,10.0,124
 Miguel A,2025-09-10,Wardman,9.5,126
-Evaristo A,2025-09-10,BridgeDist,9.5,124
+Evaristo A,2025-09-10,ARA3A     Moorefield,9.5,124
 William A,2025-09-10,Wardman,9.5,126
 Danis BA,2025-09-10,Tidal Basin,8.0,128
-Gaudencio B,2025-09-10,Kingstowne,10.0,D2
+Gaudencio B,2025-09-10,HanoverSpring,10.0,D2
 Alfonso D,2025-09-10,Wardman,9.5,125
 Rata F,2025-09-10,HanoverSpring,9.5,117
 Andres G,2025-09-10,Wardman,9.5,Own
-Jose Carlos G,2025-09-10,GU Henle,10.5,116
-Daniel GS,2025-09-10,Moorfield,9.5,124
+Jose Carlos G,2025-09-10,Canvas,10.5,116
+Daniel GS,2025-09-10,ARA3A     Moorefield,9.5,124
+Henry G,2025-09-10,ARA3A     Moorefield,9.5,122
 Pablo G,2025-09-10,Wardman,9.5,125
+Honorio G,2025-09-10,Founders 2,9.5,121
 Carlos G,2025-09-10,Wardman,9.5,123
-Daniel LG,2025-09-10,Moorfield,9.5,118
+Daniel LG,2025-09-10,Rowan,9.5,118
 Juan G,2025-09-10,Wardman,9.5,125
 Juan HR,2025-09-10,Tidal Basin,8.0,128
 Eduardo H,2025-09-10,Tidal Basin,8.0,128
 Jesus L,2025-09-10,Wardman,9.5,125
 Cristobal L,2025-09-10,Wardman,9.5,126
-Julio M,2025-09-10,Moorfield,9.5,120
-Rogelio M,2025-09-10,2011 Crystal,9.5,121
-Eric M R,2025-09-10,Moorfield,9.5,122
-Alejandro M S,2025-09-10,2011 Crystal,9.5,121
+Julio M,2025-09-10,Rowan,9.5,120
+Rogelio M,2025-09-10,Founders 2,9.5,121
+Eric M R,2025-09-10,ARA3A     Moorefield,9.5,122
+Alejandro M S,2025-09-10,Founders 2,9.5,121
 Isidro M,2025-09-10,Tidal Basin,8.0,128
 Moises P,2025-09-10,HanoverSpring,9.5,117
 Jose P,2025-09-10,HanoverSpring,9.5,117
-Leobardo RL,2025-09-10,Moorfield,9.5,122
+Leobardo RL,2025-09-10,ARA3A     Moorefield,9.5,122
 Feliciano R,2025-09-10,Tidal Basin,8.0,128
 Alberto R,2025-09-10,Tidal Basin,8.0,128
 Diego R,2025-09-10,Wardman,9.5,Own
 Eliacim R,2025-09-10,Wardman,9.5,Own
-Luis Enrique R,2025-09-10,Kingstowne,9.5,118
-Luis Martin R,2025-09-10,Kingstowne,9.5,120
+Luis Enrique R,2025-09-10,Rowan,9.5,118
+Luis Martin R,2025-09-10,Rowan,9.5,120
 Benny S,2025-09-10,Wardman,9.5,126
-Omar S,2025-09-10,Moorfield,9.5,122
-Adalberto T,2025-09-10,Kingstowne,9.5,118
-Elvis T,2025-09-10,BridgeDist,9.5,120
-Trinidad T,2025-09-10,Kingstowne,9.5,120
+Omar S,2025-09-10,ARA3A     Moorefield,9.5,122
+Adalberto T,2025-09-10,Rowan,9.5,118
+Elvis T,2025-09-10,Rowan,9.5,120
+Trinidad T,2025-09-10,Rowan,9.5,120
 Oscar VS,2025-09-10,GU Henle,9.5,119
 Fernando V,2025-09-10,GU Henle,9.5,119
-Noe VL,2025-09-10,GU Henle,10.5,116
+Noe VL,2025-09-10,Canvas,10.5,116
 Laurentino,2025-09-10,GU Henle,9.5,119
-Column1,2025-09-11,Column23,19.0,Column17
 Rigoberto Al-B,2025-09-11,2011 Crystal,9.0,121
 Carlos Al-V,2025-09-11,HanoverSpring,9.5,117
 Benito A,2025-09-11,Moorefield,9.5,124
 Miguel A,2025-09-11,Wardman,9.5,126
-Evaristo A,2025-09-11,Moorefield,9.5,118
-William A,2025-09-11,Tidal Basin,9.5,126
+Evaristo A,2025-09-11,BridgeDist,9.5,118
+William A,2025-09-11,Wardman,9.5,126
 Danis BA,2025-09-11,Tidal Basin,9.5,128
 Gaudencio B,2025-09-11,Kingstowne,9.5,D2
 Alfonso D,2025-09-11,Wardman,9.5,125
@@ -158,17 +159,18 @@ Daniel LG,2025-09-11,Moorefield,9.5,122
 Juan G,2025-09-11,Wardman,9.5,125
 Juan HR,2025-09-11,Tidal Basin,9.5,128
 Eduardo H,2025-09-11,Tidal Basin,9.5,128
+Jose Luis H,2025-09-11,Wardman,9.5,Own
 Jesus L,2025-09-11,Wardman,9.5,125
 Cristobal L,2025-09-11,Wardman,9.5,126
-Julio M,2025-09-11,Kingstowne,9.5,124
-Rogelio M,2025-09-11,2011 Crystal    Yard,9.0,121
+Julio M,2025-09-11,Moorefield,9.5,124
+Rogelio M,2025-09-11,2011 Crystal,9.0,121
 Eric M R,2025-09-11,Moorefield,9.5,122
 Misael M,2025-09-11,Wardman,9.5,Own
 Alejandro M S,2025-09-11,2011 Crystal,9.0,121
 Isidro M,2025-09-11,Tidal Basin,9.5,128
 Moises P,2025-09-11,HanoverSpring,9.5,117
 Jose P,2025-09-11,HanoverSpring,9.5,117
-Leobardo RL,2025-09-11,Kingstowne,9.5,122
+Leobardo RL,2025-09-11,Moorefield,9.5,122
 Feliciano R,2025-09-11,Tidal Basin,9.5,128
 Alberto R,2025-09-11,Tidal Basin,9.5,128
 Diego R,2025-09-11,Wardman,9.5,Own
@@ -178,24 +180,61 @@ Luis Martin R,2025-09-11,Kingstowne,9.5,120
 Benny S,2025-09-11,Wardman,9.5,126
 Omar S,2025-09-11,Moorefield,9.5,122
 Adalberto T,2025-09-11,Kingstowne,9.5,120
-Elvis T,2025-09-11,Kingstowne,9.5,118
+Elvis T,2025-09-11,BridgeDist,9.5,118
 Trinidad T,2025-09-11,Kingstowne,9.5,120
 Oscar VS,2025-09-11,GU Henle,9.5,119
 Fernando V,2025-09-11,GU Henle,9.5,119
 Noe VL,2025-09-11,GU Henle,9.5,119
 Laurentino,2025-09-11,GU Henle,9.5,119
-Column1,2025-09-12,Column28,24.0,Column22
+Rigoberto Al-B,2025-09-12,2011 Crystal,9.0,121
+Carlos Al-V,2025-09-12,HanoverSpring,9.5,117
+Benito A,2025-09-12,Moorefield,9.5,124
 Miguel A,2025-09-12,Wardman,9.5,126
+Evaristo A,2025-09-12,Moorefield,9.5,124
+William A,2025-09-12,Tidal Basin,9.5,126
+Danis BA,2025-09-12,Tidal Basin,9.5,128
+Gaudencio B,2025-09-12,Kingstowne,9.5,D2
 Alfonso D,2025-09-12,Wardman,9.5,125
+Gerardo D,2025-09-12,2011 Crystal,9.0,121
+Antoine F,2025-09-12,HanoverSpring,9.5,Own
+Rata F,2025-09-12,HanoverSpring,9.5,117
 Andres G,2025-09-12,Wardman,6.0,Own
+Jose Carlos G,2025-09-12,GU Henle,9.5,119
+Daniel GS,2025-09-12,Moorefield,9.5,124
+Henry G,2025-09-12,Moorefield,9.5,122
 Pablo G,2025-09-12,Wardman,9.5,125
+Honorio G,2025-09-12,"Canvas, Yard",9.5,Own
+Carlos G,2025-09-12,Wardman,9.5,123
+Daniel LG,2025-09-12,Moorefield,9.5,122
 Juan G,2025-09-12,Wardman,9.5,125
+Juan HR,2025-09-12,Tidal Basin,9.5,128
 Eduardo H,2025-09-12,Tidal Basin,9.5,128
 Jesus L,2025-09-12,Wardman,9.5,125
 Cristobal L,2025-09-12,Wardman,9.5,123
+Julio M,2025-09-12,Kingstowne,10.0,120
+Rogelio M,2025-09-12,2011 Crystal    Yard,10.0,121
+Eric M R,2025-09-12,Moorefield,9.5,122
 Misael M,2025-09-12,Wardman,9.5,Own
+Alejandro M S,2025-09-12,2011 Crystal,9.0,121
+Isidro M,2025-09-12,Tidal Basin,9.5,128
+Moises P,2025-09-12,HanoverSpring,9.5,117
+Jose P,2025-09-12,HanoverSpring,9.5,117
+Leobardo RL,2025-09-12,Kingstowne,9.0,Own
+Feliciano R,2025-09-12,Tidal Basin,9.5,128
+Alberto R,2025-09-12,Tidal Basin,9.5,128
+Diego R,2025-09-12,Wardman,9.5,Own
 Eliacim R,2025-09-12,Wardman,9.5,Own
-Column1,2025-09-13,Column28,29.0,Column27
+Luis Enrique R,2025-09-12,Kingstowne,10.0,120
+Luis Martin R,2025-09-12,Kingstowne,10.0,120
+Benny S,2025-09-12,Wardman,9.5,126
+Omar S,2025-09-12,Moorefield,9.5,122
+Adalberto T,2025-09-12,Kingstowne,10.0,118
+Elvis T,2025-09-12,Kingstowne,10.0,120
+Trinidad T,2025-09-12,Kingstowne,10.0,120
+Oscar VS,2025-09-12,GU Henle,9.5,119
+Fernando V,2025-09-12,GU Henle,9.5,119
+Noe VL,2025-09-12,GU Henle,9.5,119
+Laurentino,2025-09-12,GU Henle,9.5,119
 Miguel A,2025-09-13,Wardman,5.5,126
 Alfonso D,2025-09-13,Wardman,5.5,125
 Andres G,2025-09-13,Wardman,5.5,Own

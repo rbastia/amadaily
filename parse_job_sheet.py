@@ -11,6 +11,7 @@ comments are provided to make the parsing steps easy to follow.
 from __future__ import annotations
 
 import os
+import re
 from typing import Optional
 
 import pandas as pd
@@ -125,7 +126,7 @@ def process_job_sheet(path: str, sheet_name: str = "New Formula Job Sheet", outp
                 records.append({
                     "Date": iso_date,
                     "Job": _clean_str(job),
-                    "Truck(s)": _clean_str(trucks),
+                    "Truck(s)": _normalize_trucks(_clean_str(trucks)),
                     "Description": _clean_str(desc),
                     "Concrete": _clean_str(concrete),
                     "Concrete Yds": _clean_str(concrete_yds),
@@ -182,6 +183,37 @@ def _clean_str(v) -> Optional[str]:
     return s
 
 
+def _normalize_trucks(s: str) -> str:
+    """Split concatenated truck identifiers into a comma+space list.
+
+    Example: "125126" -> "125, 126" if it cleanly tokenizes into multiple
+    alphanumeric groups whose concatenation equals the original string.
+
+    We only modify when:
+      - There are no existing delimiters (comma, space, slash, dash)
+      - Regex finds 2+ tokens of the pattern [A-Za-z]*\d+[A-Za-z]*
+      - Joining the tokens exactly reconstructs the original string
+    """
+    if not s:
+        return s
+    if any(d in s for d in [',', ' ', '/', '-']):  # already delimited
+        return s
+    # 1. Heuristic for pure digits: attempt fixed-width segmentation (common truck ID lengths)
+    if s.isdigit() and len(s) >= 6:  # at least two IDs of length >=3
+        # Prefer 3-digit IDs (e.g., 125126 -> 125, 126). Fall back to 4 or 2 if evenly divisible.
+        for width in (3, 4, 2):
+            if len(s) % width == 0 and len(s) // width >= 2:
+                parts = [s[i:i+width] for i in range(0, len(s), width)]
+                # Sanity check: avoid splitting something like a single repeated digit sequence oddly
+                if all(part.lstrip('0') for part in parts):
+                    return ', '.join(parts)
+    # 2. General alphanumeric token attempt (original logic, but only if it would create >1 token)
+    tokens = re.findall(r'[A-Za-z]*\d+[A-Za-z]*', s)
+    if len(tokens) > 1 and ''.join(tokens) == s:
+        return ', '.join(tokens)
+    return s
+
+
 if __name__ == "__main__":
     import argparse
 
@@ -194,7 +226,7 @@ if __name__ == "__main__":
     # print CSV to stdout for quick preview
     print(df.to_csv(index=False))
 
-
+# This is designed to make all of this 
 def process_job_sheet_file(input_path: str, output_dir: str = "outputs", sheet_name: str = "New Formula Job Sheet") -> str:
         """High-level helper to match the parse_timesheet API style.
 

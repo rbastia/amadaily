@@ -1,244 +1,358 @@
 """combine_parsers.py
 
-Call both parsers (timesheet and job sheet), merge their outputs by Date+Job,
-and write a combined table to outputs.
+Utilities to combine the outputs of `parse_timesheet.process_timesheet` and
+`parse_job_sheet.process_job_sheet` into a single daily report.
 
-Usage:
-  from combine_parsers import combine_parsers
-  out = combine_parsers(r"path\to\Timesheet.xlsx", r"path\to\job_sheet.xlsx", output_dir="outputs")
+Expected Inputs
+---------------
+1. Timesheet summary Excel produced by `process_timesheet`, typically
+   `timesheet_daily_summary.xlsx` with columns:
+	  Date, Job, EmployeeCount, TotalHours, Employees
+2. Normalized Job Sheet table (either CSV or Excel) produced by
+   `process_job_sheet` (or a saved version) with columns:
+	  Date, Job, Truck(s), Description, Concrete, Concrete Yds, Stone, Stone Lds
+
+Output
+------
+An Excel (and optional CSV) file combining both sets of columns on (Date, Job).
+If a job appears in one source but not the other it is still included (outer
+join). Basic text normalization is applied to improve matching.
+
+Usage (Programmatic)
+--------------------
+from combine_parsers import combine_daily_reports
+path = combine_daily_reports(
+	timesheet_summary_path="outputs/timesheet_daily_summary.xlsx",
+	job_sheet_table_path="outputs/ex_job_sheet_normalized.xlsx"
+)
+print("Wrote", path)
+
+CLI
+---
+python combine_parsers.py \
+	--timesheet outputs/timesheet_daily_summary.xlsx \
+	--jobsheet outputs/ex_job_sheet_normalized.xlsx \
+	--outdir outputs
+
+Notes
+-----
+* We purposefully avoid heavy fuzzy matching libraries; a light difflib pass
+  is used only for unmatched rows.
+* A `_CanonicalJob` column is added internally for merge logic and removed in
+  the final output.
 """
+
 from __future__ import annotations
 
 import os
-from typing import Optional
+import argparse
+import difflib
+from datetime import date, datetime
+from typing import Tuple, Dict
 
 import pandas as pd
-from datetime import datetime
-import shutil
-
-# import the existing parser functions
-from parse_timesheet import process_timesheet
-from parse_job_sheet import process_job_sheet, process_job_sheet_file
 
 
-def _normalize_job_name(s: Optional[str]) -> Optional[str]:
-    if s is None:
-        return None
-    s2 = str(s).strip()
-    if not s2:
-        return None
-    # normalize to lower-case, remove punctuation (keep letters/numbers/spaces),
-    # collapse multiple internal spaces
-    import re
-    s2 = s2.lower()
-    # Replace common separators and punctuation with space
-    s2 = re.sub(r"[^a-z0-9 ]+", " ", s2)
-    s2 = " ".join(s2.split())
-    return s2
+# ------------------------- Normalization Helpers ------------------------- #
+def _norm_job(job: str | None) -> str:
+	"""Return a normalized key for a job name.
+
+	Strategy: strip, collapse internal whitespace, remove trailing commas,
+	lowercase, and remove duplicate spaces. This keeps alphanumerics & symbols
+	(so ARA3A vs ARA3A Moorefield stay distinct) while smoothing accidental
+	spacing differences.
+	"""
+	if job is None:
+		return ""
+	s = str(job).strip().strip(',')
+	if not s:
+		return ""
+	# Collapse all internal whitespace to single spaces
+	parts = s.split()
+	s = " ".join(parts)
+	return s.lower()
 
 
-def _is_noise_job(s: Optional[str]) -> bool:
-    """Return True for job names that are likely noise/artifacts (e.g. Column1).
-
-    This helps filter out header-like or placeholder job names that appear in
-    the timesheet parsing but aren't meaningful jobs to merge on.
-    """
-    if s is None:
-        return True
-    t = str(s).strip().lower()
-    if not t:
-        return True
-    import re
-    # column followed by digits (Column8, Column1) -> noise
-    if re.match(r"^column\s*\d+$", t):
-        return True
-    # generic single-word placeholders
-    if t in ("column", "col", "trk#", "trk"):
-        return True
-    # purely numeric job names are probably noise
-    if re.fullmatch(r"\d+", t):
-        return True
-    return False
+def _coerce_date(v) -> date | None:
+	if pd.isna(v):
+		return None
+	if isinstance(v, date) and not isinstance(v, datetime):  # already date
+		return v
+	try:
+		return pd.to_datetime(v).date()
+	except Exception:
+		return None
 
 
-def _ensure_date_col(df: pd.DataFrame, col: str) -> pd.Series:
-    """Return a Series of python.date objects for the given column."""
-    if col not in df.columns:
-        return pd.Series([pd.NaT] * len(df))
-    ser = pd.to_datetime(df[col], errors="coerce")
-    # keep only date portion
-    return ser.dt.date
+def _prepare_timesheet_df(df: pd.DataFrame) -> pd.DataFrame:
+	required = {"Date", "Job"}
+	missing = required - set(df.columns)
+	if missing:
+		raise ValueError(f"Timesheet summary missing columns: {missing}")
+	df = df.copy()
+	df["Date"] = df["Date"].apply(_coerce_date)
+	df["_CanonicalJob"] = df["Job"].apply(_norm_job)
+	return df
 
 
-def combine_parsers(timesheet_path: str, job_sheet_path: str, output_dir: str = "outputs", sheet_name: str = "New Formula Job Sheet") -> str:
-    """Run both parsers and merge their outputs on Date+Job.
+def _prepare_job_sheet_df(df: pd.DataFrame) -> pd.DataFrame:
+	required = {"Date", "Job"}
+	missing = required - set(df.columns)
+	if missing:
+		raise ValueError(f"Job sheet table missing columns: {missing}")
+	df = df.copy()
 
-    Writes two files into output_dir:
-      - combined_daily_report.xlsx
-      - combined_daily_report.csv
+	# Heuristic renaming for placeholder-style columns that appeared in some
+	# normalized job sheet outputs (user reported '_5', '_8', '_10'). These
+	# likely represent Truck(s), Concrete Yds, and Stone Lds respectively when
+	# the original header extraction produced generic positional names.
+	# Expand mapping to handle variants that pandas may create: plain numbers,
+	# 'Unnamed: X', or with leading underscore. All keys compared case-insensitively.
+	_alias_targets = {
+		"5": "Truck(s)",
+		"_5": "Truck(s)",
+		"unnamed: 5": "Truck(s)",
+		"8": "Concrete Yds",
+		"_8": "Concrete Yds",
+		"unnamed: 8": "Concrete Yds",
+		"10": "Stone Lds",
+		"_10": "Stone Lds",
+		"unnamed: 10": "Stone Lds",
+	}
+	# Build rename dict by scanning existing columns (cast to string for safety)
+	rename_dict = {}
+	for col in list(df.columns):
+		col_key = str(col).strip().lower()
+		if col_key in _alias_targets:
+			desired = _alias_targets[col_key]
+			if desired not in df.columns:  # avoid overwriting if already present
+				rename_dict[col] = desired
+	if rename_dict:
+		df = df.rename(columns=rename_dict)
 
-    Returns the Excel output path.
-    """
-    os.makedirs(output_dir, exist_ok=True)
-
-    # 1) Run timesheet parser which writes outputs into output_dir
-    # process_timesheet writes timesheet_long_parsed.csv and timesheet_daily_summary.xlsx
-    timesheet_summary_path = os.path.join(output_dir, "timesheet_daily_summary.xlsx")
-
-    try:
-        process_timesheet(timesheet_path, output_dir=output_dir)
-        # if successful, the summary should now exist at timesheet_summary_path
-        if not os.path.exists(timesheet_summary_path):
-            raise FileNotFoundError(f"Expected timesheet summary at {timesheet_summary_path}")
-    except PermissionError as e:
-        # Common on Windows when the target Excel file is open. Fallback: write into
-        # a timestamped temp subdirectory and continue from there.
-        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-        alt_dir = os.path.join(output_dir, f'_tmp_timesheet_{ts}')
-        print(f"PermissionError writing to {timesheet_summary_path}: {e}. Retrying in {alt_dir}.")
-        os.makedirs(alt_dir, exist_ok=True)
-        process_timesheet(timesheet_path, output_dir=alt_dir)
-        timesheet_summary_path = os.path.join(alt_dir, "timesheet_daily_summary.xlsx")
-        if not os.path.exists(timesheet_summary_path):
-            raise FileNotFoundError(f"Expected timesheet summary at {timesheet_summary_path} after fallback")
-
-    timesheet_df = pd.read_excel(timesheet_summary_path)
-
-    # 2) Run job sheet parser - we can call lower-level function to get DataFrame
-    # process_job_sheet returns a DataFrame; we won't rely on the file written by process_job_sheet_file
-    job_df = process_job_sheet(job_sheet_path, sheet_name=sheet_name)
-
-    # 3) Normalize Date and Job columns on both frames so they match
-    timesheet_df = timesheet_df.copy()
-    job_df = job_df.copy()
-
-    # Ensure Date columns are date objects
-    timesheet_df['Date'] = _ensure_date_col(timesheet_df, 'Date')
-    job_df['Date'] = _ensure_date_col(job_df, 'Date')
-
-    # Normalize Job names (strip and collapse spaces)
-    timesheet_df['Job_norm'] = timesheet_df['Job'].apply(_normalize_job_name)
-    job_df['Job_norm'] = job_df['Job'].apply(_normalize_job_name)
-
-    # Merge on Date and normalized Job name. Use outer to keep rows from both.
-    merged = pd.merge(
-        timesheet_df,
-        job_df,
-        left_on=['Date', 'Job_norm'],
-        right_on=['Date', 'Job_norm'],
-        how='outer',
-        suffixes=('_timesheet', '_job')
-    )
-
-    # Drop the helper normalized job column and optionally keep a single Job column
-    # Prefer the explicit Job column from job_df when available, otherwise timesheet one
-    def pick_job(row):
-        if pd.notna(row.get('Job_job')) and str(row.get('Job_job')).strip():
-            return row.get('Job_job')
-        return row.get('Job_timesheet')
-
-    merged['Job'] = merged.apply(pick_job, axis=1)
-    # --- Simple fuzzy matching pass ---
-    # For timesheet rows that didn't find a job-sheet match (no Job_job), try a
-    # permissive substring match against job_df on the same Date. If there's a
-    # single candidate, copy the job-specific columns into the merged row.
-    job_cols = [c for c in job_df.columns if c not in ("Date", "Job", "Job_norm")]
-    # build lookup by (Date) -> list of (job_norm, row_index)
-    job_lookup = {}
-    for i, row in job_df.iterrows():
-        d = row['Date']
-        jn = row.get('Job_norm')
-        job_lookup.setdefault(d, []).append((jn, i))
-
-    def try_fuzzy_fill(row):
-        # only operate on rows that have timesheet data and no job info
-        if pd.notna(row.get('Job_job')):
-            return row
-        date = row['Date']
-        if pd.isna(date):
-            return row
-        tjn = row.get('Job_norm')
-        if not tjn or _is_noise_job(tjn):
-            return row
-        candidates = job_lookup.get(date, [])
-        matches = []
-        for jn, idx in candidates:
-            if not jn:
-                continue
-            # prefer exact containment both ways
-            if jn in tjn or tjn in jn:
-                matches.append(idx)
-        if len(matches) == 1:
-            # copy job-specific columns from job_df
-            src = job_df.loc[matches[0]]
-            for c in ['Truck(s)', 'Description', 'Concrete', 'Concrete Yds', 'Stone', 'Stone Lds']:
-                if c in src.index and (pd.isna(row.get(c)) or not str(row.get(c)).strip()):
-                    row[c] = src.get(c)
-            # prefer the job text from job sheet
-            if pd.notna(src.get('Job')) and str(src.get('Job')).strip():
-                row['Job'] = src.get('Job')
-        return row
-
-    merged = merged.apply(try_fuzzy_fill, axis=1)
-    # Reorder columns: Date, Job, then helpful columns from both
-    # Keep timesheet summary columns if present
-    cols = ['Date', 'Job']
-    # Add timesheet summary columns if they exist
-    for c in ['EmployeeCount', 'TotalHours', 'Employees']:
-        if c in merged.columns:
-            cols.append(c)
-    # Add job-specific columns
-    for c in ['Truck(s)', 'Description', 'Concrete', 'Concrete Yds', 'Stone', 'Stone Lds']:
-        if c in merged.columns:
-            cols.append(c)
-
-    # Remove helper/internal columns created by the merge
-    drop_cols = [c for c in merged.columns if c.endswith('_timesheet') or c.endswith('_job') or c == 'Job_norm']
-    # also explicitly drop Job_timesheet/Job_job if present (we already have unified 'Job')
-    for x in ('Job_timesheet', 'Job_job'):
-        if x in drop_cols:
-            drop_cols.remove(x)
-    # But we want to drop them - ensure they are in the list
-    drop_cols = list(set(drop_cols) | set([c for c in ('Job_timesheet', 'Job_job', 'Job_norm') if c in merged.columns]))
-    out_df = merged.drop(columns=drop_cols, errors='ignore')
-    # Reorder columns: Date, Job, then timesheet summary columns if present, then job-specific cols
-    ordered = ['Date', 'Job']
-    for c in ['EmployeeCount', 'TotalHours', 'Employees']:
-        if c in out_df.columns:
-            ordered.append(c)
-    for c in ['Truck(s)', 'Description', 'Concrete', 'Concrete Yds', 'Stone', 'Stone Lds']:
-        if c in out_df.columns:
-            ordered.append(c)
-    # append any remaining columns
-    remaining = [c for c in out_df.columns if c not in ordered]
-    out_df = out_df[ordered + remaining]
-
-    out_xlsx = os.path.join(output_dir, 'combined_daily_report.xlsx')
-    out_csv = os.path.join(output_dir, 'combined_daily_report.csv')
-
-    try:
-        out_df.to_excel(out_xlsx, index=False)
-        out_df.to_csv(out_csv, index=False)
-        return out_xlsx
-    except PermissionError as e:
-        # If the target file is locked (common on Windows when open in Excel),
-        # fall back to a timestamped filename in the same output directory.
-        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-        alt_xlsx = os.path.join(output_dir, f'combined_daily_report_{ts}.xlsx')
-        alt_csv = os.path.join(output_dir, f'combined_daily_report_{ts}.csv')
-        print(f"PermissionError writing combined report to {out_xlsx}: {e}."
-              f" Writing to {alt_xlsx} instead.")
-        out_df.to_excel(alt_xlsx, index=False)
-        out_df.to_csv(alt_csv, index=False)
-        return alt_xlsx
+	df["Date"] = df["Date"].apply(_coerce_date)
+	df["_CanonicalJob"] = df["Job"].apply(_norm_job)
+	return df
 
 
-if __name__ == '__main__':
-    import argparse
+# --------------------------- Fuzzy Reconciliation --------------------------- #
+def _fuzzy_reconcile(left: pd.DataFrame, right: pd.DataFrame) -> Dict[Tuple[date, str], str]:
+	"""Attempt fuzzy reconciliation for left rows whose canonical job didn't
+	find an exact match in right for the same date.
 
-    parser = argparse.ArgumentParser(description='Combine timesheet and job sheet outputs into one merged report')
-    parser.add_argument('timesheet', help='Path to Timesheet.xlsx')
-    parser.add_argument('job_sheet', help='Path to job sheet .xlsx or csv')
-    parser.add_argument('-o', '--output_dir', default='outputs')
-    args = parser.parse_args()
-    print(combine_parsers(args.timesheet, args.job_sheet, output_dir=args.output_dir))
+	Returns a mapping of (date, left_canonical_job) -> right_canonical_job.
+	Only applied when there's exactly one reasonably close candidate.
+	"""
+	mapping: Dict[Tuple[date, str], str] = {}
+	# Build per-date index of right canonical jobs
+	by_date: Dict[date, list] = {}
+	for d, sub in right.groupby("Date"):
+		by_date[d] = list(sub["_CanonicalJob"].unique())
+
+	unmatched = left[left["_CanonicalJob"].notna()][["Date", "_CanonicalJob"]]
+	merged_keys = set(zip(right["Date"], right["_CanonicalJob"]))
+	for d, cjob in unmatched.itertuples(index=False):
+		if (d, cjob) in merged_keys or d not in by_date:
+			continue
+		candidates = by_date.get(d, [])
+		if not candidates:
+			continue
+		# Use difflib; cutoff 0.82 for reasonably similar names
+		close = difflib.get_close_matches(cjob, candidates, n=2, cutoff=0.82)
+		if len(close) == 1:
+			mapping[(d, cjob)] = close[0]
+	return mapping
+
+
+# ------------------------------- Main Combine ------------------------------- #
+def combine_daily_reports(
+	timesheet_summary_path: str,
+	job_sheet_table_path: str,
+	output_dir: str = "outputs",
+	output_basename: str | None = None,
+	write_csv: bool = True,
+	fuzzy: bool = True,
+	per_sheet: bool = False,
+) -> str:
+	"""Combine the two parser outputs and write an Excel file.
+
+	Parameters
+	----------
+	timesheet_summary_path : str
+		Path to the timesheet daily summary Excel (columns: Date, Job, ...).
+	job_sheet_table_path : str
+		Path to the normalized job sheet table (CSV or Excel) with Date & Job.
+	output_dir : str, default 'outputs'
+		Folder to place the combined output.
+	output_basename : str | None
+		Base name (without extension). Default builds from current timestamp.
+	write_csv : bool, default True
+		Also write a CSV next to the Excel.
+	fuzzy : bool, default True
+		Attempt a light fuzzy reconciliation for unmatched jobs on same date.
+
+	Returns
+	-------
+	str : path to the written Excel file.
+	"""
+	if not os.path.exists(timesheet_summary_path):
+		raise FileNotFoundError(timesheet_summary_path)
+	if not os.path.exists(job_sheet_table_path):
+		raise FileNotFoundError(job_sheet_table_path)
+
+	# Read inputs
+	ts = pd.read_excel(timesheet_summary_path) if timesheet_summary_path.lower().endswith(".xlsx") else pd.read_csv(timesheet_summary_path)
+	js = pd.read_excel(job_sheet_table_path) if job_sheet_table_path.lower().endswith(".xlsx") else pd.read_csv(job_sheet_table_path)
+
+	ts_prep = _prepare_timesheet_df(ts)
+	js_prep = _prepare_job_sheet_df(js)
+
+	# Optional fuzzy reconciliation mapping
+	if fuzzy:
+		mapping = _fuzzy_reconcile(ts_prep, js_prep)
+		if mapping:
+			# Replace left canonical job with the matched right canonical job key to enable merge
+			def _map_row(row):
+				key = (row["Date"], row["_CanonicalJob"])
+				return mapping.get(key, row["_CanonicalJob"])
+			ts_prep["_CanonicalJob"] = ts_prep.apply(_map_row, axis=1)
+
+	# Merge on Date + _CanonicalJob (outer)
+	left_cols = [c for c in ts_prep.columns if c not in ("_CanonicalJob",)]
+	right_cols = [c for c in js_prep.columns if c not in ("_CanonicalJob",)]
+
+	merged = pd.merge(
+		ts_prep, js_prep,
+		how="outer",
+		on=["Date", "_CanonicalJob"],
+		suffixes=("_TS", "_JS")
+	)
+
+	# Resolve Job column preference: prefer job sheet's original Job when present
+	def _choose_job(row):
+		job_js = row.get("Job_JS")
+		job_ts = row.get("Job_TS")
+		if isinstance(job_js, str) and job_js.strip():
+			return job_js
+		return job_ts
+	# Add a human-facing Job column (prefer job sheet Job when available)
+	merged["Job"] = merged.apply(_choose_job, axis=1)
+
+	# Reorder & select columns: Job first, Date second
+	ordered = [
+		"Job", "Date",
+		# Timesheet metrics (if present)
+		*[c for c in ("EmployeeCount", "TotalHours", "Employees") if c in merged.columns],
+		# Job sheet details (if present)
+		*[c for c in ("Truck(s)", "Description", "Concrete", "Concrete Yds", "Stone", "Stone Lds") if c in merged.columns],
+	]
+
+	# Bring over any remaining columns (excluding internal / duplicates)
+	internal = set(ordered + ["_CanonicalJob", "Job_TS", "Job_JS"])
+	remaining = [c for c in merged.columns if c not in internal]
+	final_df = merged[ordered + remaining].copy()
+
+	# Sort by Job (alphabetically, case-insensitive) then Date
+	# Use a temporary lower-cased key so sorting is deterministic regardless of case
+	final_df["_job_sort_key"] = final_df["Job"].astype(str).str.lower()
+	final_df = final_df.sort_values(["_job_sort_key", "Date"], kind="stable").drop(columns=["_job_sort_key"]).reset_index(drop=True)
+	# Output paths
+	os.makedirs(output_dir, exist_ok=True)
+	if output_basename is None:
+		from datetime import datetime as _dt
+		output_basename = f"combined_daily_report_{_dt.now():%Y%m%d_%H%M%S}"
+	xlsx_path = os.path.join(output_dir, f"{output_basename}.xlsx")
+	csv_path = os.path.join(output_dir, f"{output_basename}.csv")
+
+	if per_sheet:
+		# Write one worksheet per (Date, Job) plus an 'All' summary sheet.
+		def _sanitize_sheet_name(name: str) -> str:
+			# Remove characters Excel forbids and trim to 31 chars.
+			invalid = set('[]:*?/\\')
+			clean = ''.join(ch for ch in name if ch not in invalid)
+			return clean[:31] if len(clean) > 31 else clean
+
+		with pd.ExcelWriter(xlsx_path, engine="openpyxl") as writer:
+			# All sheet first
+			final_df.to_excel(writer, sheet_name="All", index=False)
+			used_names = {"All"}
+			# One sheet per unique Job (all dates included). Sort jobs alphabetically for predictability.
+			# Treat missing jobs as 'UnknownJob'.
+			jobs = list(final_df["Job"].fillna("UnknownJob").unique())
+			# Sort case-insensitively
+			jobs = sorted(jobs, key=lambda v: str(v).lower())
+			for job_val in jobs:
+				sub = final_df[final_df["Job"].fillna("UnknownJob") == job_val]
+				job_str = str(job_val) if job_val is not None else 'UnknownJob'
+				base = _sanitize_sheet_name(job_str)
+				name = base if base else 'Sheet'
+				# Ensure uniqueness and respect Excel 31-char limit
+				counter = 2
+				while name in used_names:
+					# Reserve room for suffix like _2
+					suffix = f"_{counter}"
+					trunc = base[:31 - len(suffix)]
+					name = _sanitize_sheet_name(f"{trunc}{suffix}")
+					counter += 1
+				used_names.add(name)
+				sub.to_excel(writer, sheet_name=name, index=False)
+	else:
+		# Single sheet mode (original behavior)
+		final_df.to_excel(xlsx_path, index=False)
+		if write_csv:
+			final_df.to_csv(csv_path, index=False)
+
+	return xlsx_path
+
+
+# ----------------------------------- CLI ----------------------------------- #
+def _build_arg_parser() -> argparse.ArgumentParser:
+	p = argparse.ArgumentParser(description="Combine timesheet & job sheet outputs into a single daily report")
+	p.add_argument("--timesheet", required=True, help="Path to timesheet_daily_summary.xlsx (or CSV)")
+	p.add_argument("--jobsheet", required=True, help="Path to normalized job sheet table (.xlsx or .csv)")
+	# New unified workbook mode: user can supply a single Excel file containing both
+	# sheets. If provided, we will parse both from that workbook and ignore the
+	# explicit --timesheet/--jobsheet file paths (unless user overrides).
+	p.add_argument("--single-workbook", help="Path to one Excel file containing both Timesheet and Job Sheet source sheets")
+	p.add_argument("--timesheet-sheet", default="Timesheet", help="Sheet name for the timesheet inside the single workbook (default: Timesheet)")
+	p.add_argument("--jobsheet-sheet", default="New Formula Job Sheet", help="Sheet name for the job sheet inside the single workbook (default: New Formula Job Sheet)")
+	p.add_argument("--outdir", default="outputs", help="Output directory (default: outputs)")
+	p.add_argument("--name", help="Optional base filename without extension")
+	p.add_argument("--no-csv", action="store_true", help="Do not write CSV alongside Excel")
+	p.add_argument("--no-fuzzy", action="store_true", help="Disable fuzzy job name reconciliation")
+	p.add_argument("--per-sheet", action="store_true", help="Write each Date+Job combo to its own worksheet (also keeps an 'All' sheet)")
+	return p
+
+
+def main():  # pragma: no cover - simple CLI wrapper
+	args = _build_arg_parser().parse_args()
+
+	# If unified workbook is supplied, generate intermediate normalized outputs first
+	if args.single_workbook:
+		from parse_timesheet import process_timesheet
+		from parse_job_sheet import process_job_sheet
+		os.makedirs(args.outdir, exist_ok=True)
+		# Derive temp paths we will feed to the combiner
+		timesheet_summary_path = os.path.join(args.outdir, "timesheet_daily_summary.xlsx")
+		job_sheet_norm_path = os.path.join(args.outdir, "ex_job_sheet_normalized.xlsx")
+		# Run parsers
+		process_timesheet(args.single_workbook, output_dir=args.outdir, sheet_name=args.timesheet_sheet)
+		process_job_sheet(args.single_workbook, sheet_name=args.jobsheet_sheet, output_path=job_sheet_norm_path)
+		# Override args for downstream combine
+		args.timesheet = timesheet_summary_path
+		args.jobsheet = job_sheet_norm_path
+	path = combine_daily_reports(
+		timesheet_summary_path=args.timesheet,
+		job_sheet_table_path=args.jobsheet,
+		output_dir=args.outdir,
+		output_basename=args.name,
+		write_csv=not args.no_csv,
+		fuzzy=not args.no_fuzzy,
+		per_sheet=args.per_sheet,
+	)
+	print(f"Combined report written: {path}")
+
+
+if __name__ == "__main__":  # pragma: no cover
+	main()
+
