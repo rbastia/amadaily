@@ -9,6 +9,10 @@
     body {
       font-family: Arial, sans-serif;
       background: #f4f6f9;
+      background-image: url("{{ url_for('static', filename='wine.jpeg') }}");
+      background-repeat: no-repeat;
+      background-size: cover;
+      background-position: center 30%;
       display: flex;
       justify-content: center;
       align-items: center;
@@ -17,7 +21,7 @@
     }
     .container {
       background: white;
-      padding: 30px;
+      padding: 50px;
       border-radius: 5px;
       box-shadow: 0 4px 10px rgba(0,0,0,0.1);
       text-align: center;
@@ -28,7 +32,6 @@
     }
     input[type="file"] {
       margin: 15px 0;
-      
     }
     input[type="checkbox"] {
       transform: scale(1.2);

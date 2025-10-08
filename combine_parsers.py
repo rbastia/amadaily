@@ -7,7 +7,7 @@ Expected Inputs
 ---------------
 1. Timesheet summary Excel produced by `process_timesheet`, typically
    `timesheet_daily_summary.xlsx` with columns:
-	  Date, Job, EmployeeCount, TotalHours, Employees
+	  Date, Job, EmployeeCount, TotalHours, TotalDrivingHours, Employees
 2. Normalized Job Sheet table (either CSV or Excel) produced by
    `process_job_sheet` (or a saved version) with columns:
 	  Date, Job, Truck(s), Description, Concrete, Concrete Yds, Stone, Stone Lds
@@ -41,6 +41,7 @@ Notes
 * A `_CanonicalJob` column is added internally for merge logic and removed in
   the final output.
 """
+
 
 from __future__ import annotations
 
@@ -239,11 +240,19 @@ def combine_daily_reports(
 	merged["Job"] = merged.apply(_choose_job, axis=1)
 
 	# Reorder & select columns: Job first, Date second
+	# Helper to pick the first available column among base and common merge suffixes
+	def _pick_first(df_cols, base: str):
+		for cand in (base, f"{base}_TS", f"{base}_JS"):
+			if cand in df_cols:
+				return cand
+		return None
+
+	_timesheet_bases = ["EmployeeCount", "TotalHours", "TotalDrivingHours", "Employees"]
+	_timesheet_metrics = [c for c in (_pick_first(merged.columns, b) for b in _timesheet_bases) if c]
+
 	ordered = [
 		"Job", "Date",
-		# Timesheet metrics (if present)
-		*[c for c in ("EmployeeCount", "TotalHours", "Employees") if c in merged.columns],
-		# Job sheet details (if present)
+		*(_timesheet_metrics),
 		*[c for c in ("Truck(s)", "Description", "Concrete", "Concrete Yds", "Stone", "Stone Lds") if c in merged.columns],
 	]
 
@@ -251,6 +260,25 @@ def combine_daily_reports(
 	internal = set(ordered + ["_CanonicalJob", "Job_TS", "Job_JS"])
 	remaining = [c for c in merged.columns if c not in internal]
 	final_df = merged[ordered + remaining].copy()
+
+	# Shorter rename logic: map first found TotalHours -> Working Hours; first found
+	# TotalDrivingHours -> Driving Hours
+	_rename_map = {}
+	wh = _pick_first(final_df.columns, "TotalHours")
+	if wh and "Working Hours" not in final_df.columns:
+		_rename_map[wh] = "Working Hours"
+	dh = _pick_first(final_df.columns, "TotalDrivingHours")
+	if dh and "Driving Hours" not in final_df.columns:
+		_rename_map[dh] = "Driving Hours"
+	if _rename_map:
+		final_df = final_df.rename(columns=_rename_map)
+
+	# Move Driving Hours next to Working Hours if both present
+	if "Working Hours" in final_df.columns and "Driving Hours" in final_df.columns:
+		cols = list(final_df.columns)
+		cols.remove("Driving Hours")
+		cols.insert(cols.index("Working Hours") + 1, "Driving Hours")
+		final_df = final_df[cols]
 
 	# Sort by Job (alphabetically, case-insensitive) then Date
 	# Use a temporary lower-cased key so sorting is deterministic regardless of case

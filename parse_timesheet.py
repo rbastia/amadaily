@@ -65,10 +65,15 @@ def process_timesheet(timesheet_path, output_dir="output", sheet_name: str = "Ti
     # 1) Ensure the output folder exists
     os.makedirs(output_dir, exist_ok=True)
 
-    # 2) Read the 'Timesheet' sheet into a DataFrame. We use header=None because
-    #    the Excel layout does not have a clean single header row (it has merged
-    #    cells and repeated blocks across columns).
-    df = pd.read_excel(timesheet_path, sheet_name=sheet_name, header=None)
+    # 2) Read the timesheet into a DataFrame. Support either Excel or CSV input.
+    #    We use header=None because the layout does not have a clean single
+    #    header row (it has merged cells and repeated blocks across columns).
+    lower_path = str(timesheet_path).lower()
+    if lower_path.endswith('.csv'):
+        # CSV doesn't have sheets; read as plain CSV
+        df = pd.read_csv(timesheet_path, header=None, dtype=object)
+    else:
+        df = pd.read_excel(timesheet_path, sheet_name=sheet_name, header=None)
 
     # 3) Find the header row index that contains the word 'Employee'. We look at
     #    the first 15 rows for safety.
@@ -225,8 +230,11 @@ def process_timesheet(timesheet_path, output_dir="output", sheet_name: str = "Ti
                     except Exception:
                         work_hrs = 0.0
 
+            # Always parse driving hours when present so we can expose them in the
+            # output DrivingHours column. Whether driving is added into the
+            # 'Hours' field is controlled by include_driving (below).
             drive_hrs = 0.0
-            if include_driving and driving_col is not None and pd.notna(driving) and str(driving).strip() != '':
+            if driving_col is not None and pd.notna(driving) and str(driving).strip() != '':
                 m2 = re.search(r"(\d+(?:\.\d+)?)", str(driving))
                 if m2:
                     try:
@@ -236,9 +244,9 @@ def process_timesheet(timesheet_path, output_dir="output", sheet_name: str = "Ti
 
             effective_hours = work_hrs + (drive_hrs if include_driving else 0.0)
 
-            # If not including driving and work hours are zero but driving exists, we skip.
-            # If including driving we allow rows where total (work+driving) > 0.
-            if job is None or effective_hours == 0.0:
+            # Include rows that have either work hours or driving hours. The
+            # 'Hours' field will include driving only when include_driving=True.
+            if job is None or (work_hrs == 0.0 and drive_hrs == 0.0):
                 continue
 
             records.append({
@@ -246,6 +254,7 @@ def process_timesheet(timesheet_path, output_dir="output", sheet_name: str = "Ti
                 'Date': the_date,
                 'Job': str(job).strip(),
                 'Hours': effective_hours,  # remains singular; optionally includes driving
+                'DrivingHours': drive_hrs,
                 'Trk#': df.iat[r, day_col] if day_col < df.shape[1] else None,
             })
 
@@ -262,6 +271,7 @@ def process_timesheet(timesheet_path, output_dir="output", sheet_name: str = "Ti
         .agg(
             EmployeeCount=('Employee', lambda x: x.nunique()),
             TotalHours=('Hours', 'sum'),  # Hours may or may not include driving based on flag
+            TotalDrivingHours=('DrivingHours', 'sum'),
             Employees=('Employee', lambda x: ', '.join(sorted(set(x))))
         )
         .reset_index()
@@ -271,7 +281,20 @@ def process_timesheet(timesheet_path, output_dir="output", sheet_name: str = "Ti
     out_xlsx = os.path.join(output_dir, 'timesheet_daily_summary.xlsx')
 
     long_df.to_csv(out_csv, index=False)
-    summary.to_excel(out_xlsx, index=False)
+    # Safe write for summary: handle case where file is open (Windows Excel lock)
+    try:
+        summary.to_excel(out_xlsx, index=False)
+    except PermissionError:
+        # If XLSX is locked, write CSV instead and notify via returned path
+        base, ext = os.path.splitext(out_xlsx)
+        alt_xlsx = base + '_new' + ext
+        try:
+            summary.to_excel(alt_xlsx, index=False)
+            out_xlsx = alt_xlsx
+        except PermissionError:
+            out_csv_summary = base + '_daily_summary.csv'
+            summary.to_csv(out_csv_summary, index=False)
+            out_xlsx = out_csv_summary
 
     # out_csv = os.path.join(output_dir, 'timesheet_long_parsed.csv')   
     # out_xlsx = os.path.join(output_dir, 'timesheet_daily_summary.csv')
