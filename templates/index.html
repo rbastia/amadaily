@@ -9,10 +9,11 @@
     body {
       font-family: Arial, sans-serif;
       background: #f4f6f9;
-      background-image: url("{{ url_for('static', filename='wine.jpeg') }}");
+      /* background-image: url("{{ url_for('static', filename='sexy.jpg') }}"); */
       background-repeat: no-repeat;
-      background-size: cover;
-      background-position: center 30%;
+      /* background-size: cover; */
+      background-size: 128% auto; /* stretch to full width, auto height */
+      background-position: 30% 80%;
       display: flex;
       justify-content: center;
       align-items: center;
