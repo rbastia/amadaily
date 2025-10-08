@@ -44,6 +44,7 @@ def combine_workbook(
     per_sheet: bool = True,
     name: str | None = None,
     fuzzy: bool = True,
+    open_after: bool = False,
 ) -> str:
     if not os.path.exists(workbook_path):
         raise FileNotFoundError(workbook_path)
@@ -69,6 +70,11 @@ def combine_workbook(
         fuzzy=fuzzy,
         per_sheet=per_sheet,
     )
+    if open_after:
+        try:  # Windows specific convenience
+            os.startfile(combined_path)  # type: ignore[attr-defined]
+        except Exception:
+            pass
     return combined_path
 
 
@@ -81,6 +87,8 @@ def _parse_args(argv=None):  # pragma: no cover (thin wrapper)
     p.add_argument("--name", help="Optional base name for combined output (timestamp used if omitted)")
     p.add_argument("--no-fuzzy", action="store_true", help="Disable fuzzy job name reconciliation")
     p.add_argument("--single-sheet", action="store_true", help="Write only a single sheet (no per-job sheets)")
+    p.add_argument("--open", action="store_true", help="Open the resulting combined Excel file when done")
+    p.add_argument("--print-final-only", action="store_true", help="Print ONLY the final path (for macro parsing)")
     return p.parse_args(argv)
 
 
@@ -95,8 +103,13 @@ def main():  # pragma: no cover
             per_sheet=not args.single_sheet,
             name=args.name,
             fuzzy=not args.no_fuzzy,
+            open_after=args.open,
         )
-        print(f"Combined report written: {out}")
+        if args.print_final_only:
+            # Emit ONLY the path (no extra words) so VBA can capture easily
+            print(out)
+        else:
+            print(f"Combined report written: {out}")
     except Exception as e:
         print(f"ERROR: {e}", file=sys.stderr)
         sys.exit(1)
