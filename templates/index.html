@@ -7,16 +7,21 @@
 
   <style>
     body {
+      /* include padding in the height calculation so 100vh doesn't overflow */
+      box-sizing: border-box;
       font-family: Arial, sans-serif;
       background: #f4f6f9;
       background-image: url("{{ url_for('static', filename='sexy.jpg') }}");
       background-repeat: no-repeat;
       /* background-size: cover; */
-      background-size: 128% auto; /* stretch to full width, auto height */
-      background-position: 30% 80%;
+      background-size: 115% auto; /* stretch to full width, auto height */
+      background-position: 30% 85%;
       display: flex;
       justify-content: center;
-      align-items: center;
+      /* move content closer to the bottom */
+      align-items: flex-end;
+      /* add some breathing room from the bottom edge; tweak as needed (e.g. 6vh, 10vh) */
+      padding-bottom: 6vh;
       height: 100vh;
       margin: 0;
     }
