@@ -18,18 +18,25 @@
     .container {
       background: white;
       padding: 30px;
-      border-radius: 12px;
+      border-radius: 5px;
       box-shadow: 0 4px 10px rgba(0,0,0,0.1);
       text-align: center;
     }
     h1 {
       color: #333;
+      margin: 0; /* keep title vertically aligned with the logo */
     }
     input[type="file"] {
       margin: 15px 0;
+      
+    }
+    input[type="checkbox"] {
+      transform: scale(1.2);
+      margin-right: 8px;
+      accent-color: #a3161c;
     }
     button {
-      background: #007bff;
+      background: #a3161c;
       color: white;
       border: none;
       padding: 10px 20px;
@@ -37,13 +44,30 @@
       cursor: pointer;
     }
     button:hover {
-      background: #0056b3;
+      background: #700f14;
+    }
+    /* header row: logo left, title right */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: center; /* keep the pair centered in the card */
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .logo {
+      width: 50px; /* smaller logo */
+      height: auto;
+      margin-bottom: 0;
+      display: block;
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Combined Daily Report</h1>
+    <div class="header">
+      <img src="{{ url_for('static', filename='ama_logo.png') }}" alt="AMA logo" class="logo">
+      <h1>Combined Daily Report</h1>
+    </div>
     <p>Upload an Excel workbook that contains both required sheets.</p>
     <form action="/upload" method="post" enctype="multipart/form-data">
       <input type="file" name="workbook" accept=".xlsx,.xls,.xlsm,.xlsb" required><br><br>
