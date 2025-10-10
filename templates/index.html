@@ -6,6 +6,11 @@
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='ama_logo.png')}}" > 
 
   <style>
+    :root {
+      --accent: #a3161c;
+      --accent-dark: #700f14;
+    }
+
     body {
       /* include padding in the height calculation so 100vh doesn't overflow */
       box-sizing: border-box;
@@ -14,26 +19,27 @@
       background-image: url("{{ url_for('static', filename='sexy.jpg') }}");
       background-repeat: no-repeat;
       /* background-size: cover; */
-      background-size: 115% auto; /* stretch to full width, auto height */
-      background-position: 30% 85%;
+      background-size: 120% auto; /* stretch to full width, auto height */
+      background-position: 30% 87%;
       display: flex;
       justify-content: center;
       /* move content closer to the bottom */
       align-items: flex-end;
       /* add some breathing room from the bottom edge; tweak as needed (e.g. 6vh, 10vh) */
-      padding-bottom: 6vh;
+      padding-bottom: 10vh;
       height: 100vh;
       margin: 0;
     }
     .container {
       background: white;
       padding: 50px;
+      border: 2px solid #173872; /* container border changed per request */
       border-radius: 5px;
       box-shadow: 0 4px 10px rgba(0,0,0,0.1);
       text-align: center;
     }
     h1 {
-      color: #333;
+      color: #173872;
       margin: 0; /* keep title vertically aligned with the logo */
     }
     input[type="file"] {
@@ -42,10 +48,10 @@
     input[type="checkbox"] {
       transform: scale(1.2);
       margin-right: 8px;
-      accent-color: #a3161c;
+      accent-color: var(--accent);
     }
     button {
-      background: #a3161c;
+      background: var(--accent);
       color: white;
       border: none;
       padding: 10px 20px;
@@ -53,7 +59,7 @@
       cursor: pointer;
     }
     button:hover {
-      background: #700f14;
+      background: var(--accent-dark);
     }
     /* header row: logo left, title right */
     .header {
