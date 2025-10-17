@@ -70,11 +70,16 @@ def upload_file():
         # Determine per-sheet flag from form checkbox (present when checked)
         per_sheet_flag = bool(request.form.get('per_sheet'))
 
+        # Build output basename from the original uploaded filename so the
+        # combined workbook mirrors the input name (prefixed with "COMBINED ").
+        # secure_filename was used for saving so reuse `fname` here.
+        uploaded_base, _ = os.path.splitext(fname)
+        output_basename = f"COMBINED {uploaded_base}"
         combined_path = combine_daily_reports(
             timesheet_summary_path=timesheet_summary_path,
             job_sheet_table_path=job_sheet_normalized_path,
             output_dir=OUTPUT_FOLDER,
-            output_basename="combined_daily_report",
+            output_basename=output_basename,
             write_csv=False,
             fuzzy=True,
             per_sheet=per_sheet_flag,

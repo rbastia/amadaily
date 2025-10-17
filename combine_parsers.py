@@ -287,10 +287,25 @@ def combine_daily_reports(
 	# Output paths
 	os.makedirs(output_dir, exist_ok=True)
 	if output_basename is None:
-		from datetime import datetime as _dt
-		output_basename = f"combined_daily_report_{_dt.now():%Y%m%d_%H%M%S}"
-	xlsx_path = os.path.join(output_dir, f"{output_basename}.xlsx")
-	csv_path = os.path.join(output_dir, f"{output_basename}.csv")
+		# Default output name: prefix the input timesheet filename with "COMBINED "
+		# Example: "Timesheet 9-7-25 thru 9-13-25.xlsx" ->
+		# "COMBINED Timesheet 9-7-25 thru 9-13-25.xlsx"
+		input_basename = os.path.basename(timesheet_summary_path)
+		# Avoid double-prefixing if the input already starts with COMBINED
+		if input_basename.lower().startswith("combined "):
+			xlsx_name = input_basename if input_basename.lower().endswith(".xlsx") else input_basename
+		else:
+			if input_basename.lower().endswith(".xlsx"):
+				xlsx_name = f"COMBINED {input_basename}"
+			else:
+				name_no_ext, _ = os.path.splitext(input_basename)
+				xlsx_name = f"COMBINED {name_no_ext}.xlsx"
+		xlsx_path = os.path.join(output_dir, xlsx_name)
+		# CSV sidecar uses same base name with .csv extension
+		csv_path = os.path.join(output_dir, os.path.splitext(xlsx_name)[0] + ".csv")
+	else:
+		xlsx_path = os.path.join(output_dir, f"{output_basename}.xlsx")
+		csv_path = os.path.join(output_dir, f"{output_basename}.csv")
 
 	if per_sheet:
 		# Write one worksheet per (Date, Job) plus an 'All' summary sheet.
@@ -369,6 +384,12 @@ def main():  # pragma: no cover - simple CLI wrapper
 		# Override args for downstream combine
 		args.timesheet = timesheet_summary_path
 		args.jobsheet = job_sheet_norm_path
+		# If the user didn't provide an explicit --name, prefer the original
+		# uploaded workbook's basename so the combined output mirrors it.
+		if not args.name:
+			uploaded_base = os.path.basename(args.single_workbook)
+			name_no_ext, _ = os.path.splitext(uploaded_base)
+			args.name = f"COMBINED {name_no_ext}"
 	path = combine_daily_reports(
 		timesheet_summary_path=args.timesheet,
 		job_sheet_table_path=args.jobsheet,
