@@ -307,6 +307,28 @@ def combine_daily_reports(
 		xlsx_path = os.path.join(output_dir, f"{output_basename}.xlsx")
 		csv_path = os.path.join(output_dir, f"{output_basename}.csv")
 
+	def _autosize_sheet(writer, sheet_name: str, df: pd.DataFrame) -> None:
+		"""Auto-size columns for a sheet using openpyxl. Silent no-op if
+		openpyxl isn't available (keeps backward compatibility).
+		"""
+		try:
+			from openpyxl.utils import get_column_letter
+		except Exception:
+			# openpyxl missing or not importable; skip autosizing
+			return
+		# Access the worksheet object written by pandas
+		workbook = writer.book
+		worksheet = writer.sheets.get(sheet_name)
+		if worksheet is None:
+			return
+		for idx, col in enumerate(df.columns, 1):
+			# Compute max length over header + values
+			values = df[col].astype(object).fillna("").map(str)
+			max_len = max([len(str(col))] + [len(v) for v in values])
+			# Add a small padding so text doesn't touch cell edge
+			width = max_len + 2
+			worksheet.column_dimensions[get_column_letter(idx)].width = width
+
 	if per_sheet:
 		# Write one worksheet per (Date, Job) plus an 'All' summary sheet.
 		def _sanitize_sheet_name(name: str) -> str:
@@ -318,6 +340,7 @@ def combine_daily_reports(
 		with pd.ExcelWriter(xlsx_path, engine="openpyxl") as writer:
 			# All sheet first
 			final_df.to_excel(writer, sheet_name="All", index=False)
+			_autosize_sheet(writer, "All", final_df)
 			used_names = {"All"}
 			# One sheet per unique Job (all dates included). Sort jobs alphabetically for predictability.
 			# Treat missing jobs as 'UnknownJob'.
@@ -339,9 +362,12 @@ def combine_daily_reports(
 					counter += 1
 				used_names.add(name)
 				sub.to_excel(writer, sheet_name=name, index=False)
+				_autosize_sheet(writer, name, sub)
 	else:
-		# Single sheet mode (original behavior)
-		final_df.to_excel(xlsx_path, index=False)
+		# Single sheet mode: write into an 'All' sheet and autosize columns
+		with pd.ExcelWriter(xlsx_path, engine="openpyxl") as writer:
+			final_df.to_excel(writer, sheet_name="All", index=False)
+			_autosize_sheet(writer, "All", final_df)
 		if write_csv:
 			final_df.to_csv(csv_path, index=False)
 
@@ -404,4 +430,5 @@ def main():  # pragma: no cover - simple CLI wrapper
 
 if __name__ == "__main__":  # pragma: no cover
 	main()
+	# Can we get it so that all of the columns are expanded out in the output excel spreadsheet? So that the user doesn't have to expand them all out every time
 
