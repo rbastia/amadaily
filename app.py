@@ -1,10 +1,14 @@
 from flask import Flask, render_template, request, send_file
+import shutil
+import sys
+import subprocess
 import os
 from werkzeug.utils import secure_filename
 import pandas as pd
 from parse_timesheet import process_timesheet
 from parse_job_sheet import process_job_sheet
 from combine_parsers import combine_daily_reports
+from flask import jsonify, send_from_directory
 
 # Create a Flask app instance
 app = Flask(__name__)
@@ -85,7 +89,7 @@ def upload_file():
             per_sheet=per_sheet_flag,
         )
 
-        # Optionally remove intermediate artifacts so only combined output remains.
+    # Optionally remove intermediate artifacts so only combined output remains.
         # Set KEEP_INTERMEDIATE=1 to skip deletion (for debugging).
         if os.environ.get("KEEP_INTERMEDIATE") != "1":
             intermediate = [
@@ -102,11 +106,119 @@ def upload_file():
                     except Exception:
                         pass
     except Exception as e:
-        return f"Processing failed: {e}", 500
+        # Log full traceback to outputs/error.log for easier debugging when
+        # running from an EXE or headless environment.
+        import traceback
+        os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+        tb = traceback.format_exc()
+        try:
+            with open(os.path.join(OUTPUT_FOLDER, "error.log"), "a", encoding="utf-8") as fh:
+                fh.write("\n--- ERROR: upload_file failed ---\n")
+                fh.write(tb)
+        except Exception:
+            # If logging fails, ignore to avoid masking original error
+            pass
+        # Return a short message to the client and point them to the log file
+        return ("Processing failed; full error written to outputs/error.log. "
+                f"Summary: {e}"), 500
 
-    return send_file(combined_path, as_attachment=True)
+    # Ensure we use an absolute path (helps when running from an EXE with
+    # a different current working directory).
+    combined_path = os.path.abspath(combined_path)
+
+    # If we're running as a frozen EXE, some browsers/packagers have trouble
+    # returning files directly. Instead, copy the file to the user's
+    # Downloads folder and open Explorer to show it.
+    if getattr(sys, "frozen", False):
+        try:
+            downloads = os.path.join(os.path.expanduser("~"), "Downloads")
+            os.makedirs(downloads, exist_ok=True)
+            dest_base = os.path.join(downloads, os.path.basename(combined_path))
+            dest = dest_base
+            name, ext = os.path.splitext(dest_base)
+            idx = 1
+            while os.path.exists(dest):
+                dest = f"{name} ({idx}){ext}"
+                idx += 1
+            shutil.copy2(combined_path, dest)
+            # Try to open Explorer and select the file so the user sees it.
+            try:
+                subprocess.Popen(["explorer", "/select,", dest])
+            except Exception:
+                try:
+                    # Fallback: just open the Downloads folder
+                    subprocess.Popen(["explorer", downloads])
+                except Exception:
+                    pass
+            return (f"Saved combined file to your Downloads folder: {dest}"), 200
+        except Exception as e:
+            import traceback, tempfile
+            tb = traceback.format_exc()
+            try:
+                os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+                with open(os.path.join(OUTPUT_FOLDER, "error.log"), "a", encoding="utf-8") as fh:
+                    fh.write("\n--- ERROR: copy to Downloads failed ---\n")
+                    fh.write(tb)
+            except Exception:
+                pass
+            try:
+                tempfn = os.path.join(tempfile.gettempdir(), "ama_daily_error.log")
+                with open(tempfn, "a", encoding="utf-8") as fh:
+                    fh.write("\n--- ERROR: copy to Downloads failed ---\n")
+                    fh.write(tb)
+            except Exception:
+                pass
+            return ("Processing failed when saving the combined file to Downloads. "
+                    "Full error written to outputs/error.log and to your system temp folder."), 500
+
+    # Not frozen: return file as HTTP attachment (original behavior)
+    is_xhr = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    if is_xhr:
+        # Provide a safe URL that serves files from the outputs folder
+        download_name = os.path.basename(combined_path)
+        return jsonify({"download_url": f"/download/{download_name}"})
+
+    try:
+        return send_file(combined_path, as_attachment=True)
+    except Exception as e:
+        # Log full traceback to both outputs/error.log (relative) and a
+        # known temp location for easier discovery when running the EXE.
+        import traceback, tempfile
+        tb = traceback.format_exc()
+        # relative outputs in the current working dir
+        try:
+            os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+            with open(os.path.join(OUTPUT_FOLDER, "error.log"), "a", encoding="utf-8") as fh:
+                fh.write("\n--- ERROR: send_file failed ---\n")
+                fh.write(tb)
+        except Exception:
+            pass
+        # also write to system temp directory so it's easy to find
+        try:
+            tempfn = os.path.join(tempfile.gettempdir(), "ama_daily_error.log")
+            with open(tempfn, "a", encoding="utf-8") as fh:
+                fh.write("\n--- ERROR: send_file failed ---\n")
+                fh.write(tb)
+        except Exception:
+            pass
+        return ("Processing failed when sending the combined file. "
+                "Full error written to outputs/error.log and to your system temp folder."), 500
+
+
 
 
 if __name__ == "__main__":
     # Run the Flask development server
     app.run(debug=True)
+
+
+@app.route('/download/<path:filename>')
+def download_file(filename):
+    # Prevent path traversal and only serve files from OUTPUT_FOLDER
+    safe_name = os.path.basename(filename)
+    out_dir = os.path.abspath(OUTPUT_FOLDER)
+    file_path = os.path.join(out_dir, safe_name)
+    if not os.path.exists(file_path):
+        return ("File not found"), 404
+    # Use send_from_directory to let Flask set headers correctly
+    return send_from_directory(out_dir, safe_name, as_attachment=True)

@@ -84,15 +84,78 @@
       <h1>Combined Daily Report</h1>
     </div>
     <p>Upload an Excel workbook that contains both required sheets.</p>
-    <form action="/upload" method="post" enctype="multipart/form-data">
-      <input type="file" name="workbook" accept=".xlsx,.xls,.xlsm,.xlsb" required><br><br>
+    <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
+      <input id="workbook-input" type="file" name="workbook" accept=".xlsx,.xls,.xlsm,.xlsb" required><br><br>
       <label style="display:inline-flex; align-items:center; gap:8px; font-size:0.95rem;">
-        <input type="checkbox" name="per_sheet" checked>
+        <input id="per-sheet" type="checkbox" name="per_sheet" checked>
         Write each Job to its own sheet as well
       </label>
       <br><br>
-      <button type="submit">Generate Combined Report</button>
+      <button id="submit-btn" type="submit">Generate Combined Report</button>
     </form>
+    <div id="status" style="margin-top:12px;color:#173872;"></div>
+
+    <script>
+      // AJAX submit that keeps user on the same page and triggers the
+      // browser's download using a returned download_url.
+      const form = document.getElementById('upload-form');
+      const status = document.getElementById('status');
+      const submitBtn = document.getElementById('submit-btn');
+
+      form.addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const fileInput = document.getElementById('workbook-input');
+        if (!fileInput.files.length) return;
+        submitBtn.disabled = true;
+        status.textContent = 'Uploading & processing...';
+
+        const fd = new FormData(form);
+        try {
+          const res = await fetch(form.action, {
+            method: 'POST',
+            body: fd,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+          });
+          // Try to parse JSON response (contains download_url) when successful
+          // Read the body exactly once to avoid "body stream already read" errors.
+          const bodyText = await res.text();
+          if (res.ok) {
+            // Try to parse JSON from the text; fall back to using the text directly.
+            try {
+              const data = JSON.parse(bodyText);
+              if (data && data.download_url) {
+                status.textContent = 'Ready — starting browser download...';
+                window.location = data.download_url;
+                setTimeout(() => {
+                  submitBtn.disabled = false;
+                  status.textContent = 'Done. You can upload another file.';
+                  form.reset();
+                }, 1500);
+                return;
+              }
+            } catch (err) {
+              // bodyText isn't JSON — treat it as a success message
+              status.textContent = bodyText || 'Done.';
+              submitBtn.disabled = false;
+              form.reset();
+              return;
+            }
+            // If it was JSON but didn't contain download_url, show raw text
+            status.textContent = bodyText || 'Done.';
+            submitBtn.disabled = false;
+            form.reset();
+            return;
+          } else {
+            // Non-OK status: show the server response text as an error
+            status.textContent = 'Server error: ' + (bodyText || res.statusText || res.status);
+          }
+        } catch (err) {
+          status.textContent = 'Upload failed: ' + err.message;
+        } finally {
+          submitBtn.disabled = false;
+        }
+      });
+    </script>
   </div>
 </body>
 </html>
